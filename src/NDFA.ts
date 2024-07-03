@@ -2,13 +2,13 @@ import { assert } from "console";
 
 /*
   NDFAState allows to store the state of a Non Deterministic Finite Automata. Technically it is a bit set
-  which is implemented with a Uint32Array. 
+  which is implemented with a BigInt. 
 */
 export class NDFAState {
 
   constructor(stateCount: number) {
     this.numberOfStates = stateCount;
-    this.bitField = new Uint32Array(Math.ceil(stateCount/8));
+    this.bitField = BigInt(0);
   }
 
   static fromBoolArray(states: boolean[]) :NDFAState {
@@ -23,40 +23,33 @@ export class NDFAState {
 
   static copy(origin: NDFAState) :NDFAState {
     let s = new NDFAState(origin.numberOfStates);
-    for (let i = 0; i < origin.bitField.length; i++) {
-      s.bitField[i] = origin.bitField[i];
-    }
+    s.bitField = origin.bitField;
     return s;
   }
 
-  resize(newSize: number): void {
-    let newbitField = new Uint32Array(newSize);
-    newbitField.set(this.bitField);
-    this.bitField = newbitField;
+  // This method allows to shift a state (add state as 0 at the beginning)
+  shift(shiftCount: number): void {
+    this.bitField <<= BigInt(shiftCount);
   }
 
   union(rhs: NDFAState): void {
-    for (let i = 0; i < rhs.bitField.length; i++) {
-      this.bitField[i] |= rhs.bitField[i];
-    }
+    this.bitField |= rhs.bitField;
   }
 
   intersect(rhs: NDFAState): void {
-    for (let i = 0; i < rhs.bitField.length; i++) {
-      this.bitField[i] &= rhs.bitField[i];
-    }
+    this.bitField &= rhs.bitField;
   }
 
   contains(state: number): boolean {
-    return ((this.bitField[Math.floor(state/32)] >> (state%32))&1) == 1;
+    return (this.bitField & BigInt(1<<state)) != 0n;
   }
 
   addState(state: number): void {
-    this.bitField[Math.floor(state/32)] |= (1 << (state%32));
+    this.bitField |= BigInt(1 << state);
   }
 
   removeState(state: number): void {
-    this.bitField[Math.floor(state/32)] &= ~(1 << (state%32));
+    this.bitField  &= ~BigInt(1 << state);
   }
 
   foreach(callBack: (state: number) => void): void {
@@ -84,7 +77,7 @@ export class NDFAState {
     return true;
   }
 
-  protected bitField: Uint32Array;
+  protected bitField: bigint;
   protected numberOfStates: number;
 }
 
@@ -183,8 +176,22 @@ export class NDFA {
     return !s.isEmpty();
   }
 
+  recognizeEmpty(): boolean {
+    let accessible = this.dfs(this.initialState, (i) => {
+      let next: number[] = [];
+      for (const [symbol, destinations] of Object.entries(this.deltaTable[i])) {
+        destinations.foreach((j) => {
+          next.push(j);
+        })
+      }
+      return next;
+    });
+    accessible.intersect(this.finalStates);
+    return accessible.isEmpty();
+  }
+
   // A DFS of the labeled graph, the callBack return the next possible explored state
-  private dfs(from: number, callBack: (at: number) => number[]) {
+  private dfs(from: number, callBack: (at: number) => number[]): NDFAState {
     let visited = new NDFAState(this.deltaTable.length);
     let toVisit = [from];
 
@@ -197,6 +204,7 @@ export class NDFA {
       visited.addState(at);
       toVisit = callBack(at).concat(toVisit);
     }
+    return visited;
   }
 
   private computeEpsilonClosure(state: NDFAState): NDFAState {
