@@ -1,5 +1,6 @@
 import { assert } from "console";
 import { Regex, RegexNodeType } from "./regex";
+import { DFA } from "./DFA";
 
 /*
   NDFAState allows to store the state of a Non Deterministic Finite Automata. Technically it is a bit set
@@ -27,6 +28,8 @@ export class NDFAState {
     s.bitField = origin.bitField;
     return s;
   }
+
+  // TODO : Return the object to allow easier usage of these function
 
   // This method allows to shift a state (add state as 0 at the beginning)
   shift(shiftCount: number): void {
@@ -68,6 +71,16 @@ export class NDFAState {
       out+=`${i}, `
     })
     return out + "}";
+  }
+
+  toString(): string {
+    return String(this.bitField);
+  }
+
+  static fromString(s: string, stateCount: number): NDFAState {
+    let result = new NDFAState(stateCount);
+    result.bitField = BigInt(s);
+    return result;
   }
 
   isEmpty(): boolean {
@@ -290,7 +303,11 @@ export class NDFA {
     return bShifted;
   }
 
-  static Thompson(e: Regex): NDFA {
+  static Thompson(i: Regex | String): NDFA {
+    if (typeof i == "string") {
+      return this.Thompson(Regex.parse(i));
+    }
+    let e = i as Regex;
     switch (e.nodeType) {
       case RegexNodeType.Empty: {
         assert(false); // We need to firstly eliminate empty in expression
@@ -314,6 +331,62 @@ export class NDFA {
         return this.createStar(a);
       }
     }
+  }
+
+  toDFA(): DFA {
+    let table: Record<string, number> = {};
+
+    let initS: NDFAState = new NDFAState(this.numberOfStates());
+    initS.addState(this.initialState);
+
+    let initSClosure = this.computeEpsilonClosure(initS);
+    table[String(initSClosure)] = 0;
+
+    let result = new DFA(1);
+
+    let visited: string[] = [];
+    
+    const explore = (origin: NDFAState) => {
+      if (visited.includes(String(origin))) {
+        return;
+      }
+      visited.push(String(origin));
+
+      let symbols: string[] = [];
+      let originInTable = table[String(origin)];
+      origin.foreach((i) => {
+        for (const s of Object.keys(this.deltaTable[i])) {
+          if (s != epsilonTransition)
+            symbols.push(s);
+        }
+      })
+
+      symbols.forEach((s) => {
+        let destination = this.delta(origin, s);
+        let destinationInTable = -1;
+        if (!Object.keys(table).includes(String(destination))) {
+          table[String(destination)] = result.numberOfStates();
+          destinationInTable = result.numberOfStates();
+          result.addState();
+        } else {
+          destinationInTable = table[String(destination)];
+        }
+        result.addTransition(originInTable, s, destinationInTable);
+        explore(destination);
+      })
+    }
+    
+    explore(initSClosure);
+
+    for(const [stringifiedState, stateInDFA] of Object.entries(table)) {
+      let s: NDFAState = NDFAState.fromString(stringifiedState, this.numberOfStates());
+      s.intersect(this.finalStates);
+      if (!s.isEmpty()) {
+        result.finalStates.push(stateInDFA);
+      }
+    }
+
+    return result;
   }
   
 

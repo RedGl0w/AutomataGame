@@ -12,6 +12,10 @@ describe("NDFA", () => {
   astarbstar.addTransition(1, "b", 1);
   astarbstar.finalStates = NDFAState.fromBoolArray([false, true]);
 
+  console.log(astarbstar.toDFA());
+
+  console.log(NDFA.Thompson("a|aab*").toDFA().generateDot())
+
   it("Recognize", () => {
     // Some words that should be recognized
     expect(astarbstar.isRecognized("a")).toBeTruthy();
