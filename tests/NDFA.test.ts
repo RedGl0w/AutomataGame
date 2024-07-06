@@ -1,4 +1,5 @@
 import { NDFA, NDFAState, epsilonTransition } from "../src/NDFA";
+import { Regex, RegexNodeType } from "../src/regex";
 
 describe("NDFAState", () => {
   // TODO Add tests
@@ -32,5 +33,23 @@ describe("NDFA", () => {
 
   it("recognizeEmpty", () => {
     expect(astarbstar.recognizeEmpty()).toBeFalsy();
-  })
+  });
+
+  it("Thompson", () => {
+    // exp = a*c|ε
+    let exp = new Regex(RegexNodeType.Union, [
+      new Regex(RegexNodeType.Concat, [
+        new Regex(RegexNodeType.Star, new Regex(RegexNodeType.Char, "a")),
+        new Regex(RegexNodeType.Char, "c")
+      ]),
+      new Regex(RegexNodeType.Epsilon)
+    ]);
+
+    let expThompson = NDFA.Thompson(exp);
+    expect(expThompson.isRecognized("aaac")).toBeTruthy();
+    expect(expThompson.isRecognized("c")).toBeTruthy();
+    expect(expThompson.isRecognized("")).toBeTruthy();
+    expect(expThompson.isRecognized("aaa")).toBeFalsy();
+    expect(expThompson.isRecognized("aca")).toBeFalsy();
+  });
 });

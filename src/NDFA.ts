@@ -1,4 +1,5 @@
 import { assert } from "console";
+import { Regex, RegexNodeType } from "./regex";
 
 /*
   NDFAState allows to store the state of a Non Deterministic Finite Automata. Technically it is a bit set
@@ -9,7 +10,7 @@ export class NDFAState {
   constructor(stateCount: number) {
     this.numberOfStates = stateCount;
     this.bitField = BigInt(0);
-  }
+  } 
 
   static fromBoolArray(states: boolean[]) :NDFAState {
     let s = new NDFAState(states.length);
@@ -30,6 +31,7 @@ export class NDFAState {
   // This method allows to shift a state (add state as 0 at the beginning)
   shift(shiftCount: number): void {
     this.bitField <<= BigInt(shiftCount);
+    this.numberOfStates += shiftCount;
   }
 
   union(rhs: NDFAState): void {
@@ -94,11 +96,15 @@ export class NDFA {
     }
   }
 
+  numberOfStates(): number {
+    return this.deltaTable.length;
+  }
+
   addTransition(originState: number, symbolRead: NDFATransitionSymbol, destinationState: number): void {
-    assert(originState <= this.deltaTable.length, "originState is out of bounds");
-    assert(destinationState <= this.deltaTable.length, "destinationState is out of bounds");
+    assert(originState <= this.numberOfStates(), "originState is out of bounds");
+    assert(destinationState <= this.numberOfStates(), "destinationState is out of bounds");
     if(!Object.keys(this.deltaTable[originState]).includes(String(symbolRead))) {
-      this.deltaTable[originState][symbolRead] = new NDFAState(this.deltaTable.length);
+      this.deltaTable[originState][symbolRead] = new NDFAState(this.numberOfStates());
     }
     this.deltaTable[originState][symbolRead].addState(destinationState);
   }
@@ -142,7 +148,7 @@ export class NDFA {
     let closureOfState = this.computeEpsilonClosure(state);
 
     // Read an epsilon from all these position
-    let statesAfterReadingc = new NDFAState(this.deltaTable.length);
+    let statesAfterReadingc = new NDFAState(this.numberOfStates());
     closureOfState.foreach((i) => {
       if (Object.keys(this.deltaTable[i]).includes(c)) {
         statesAfterReadingc.union(this.deltaTable[i][c]);
@@ -156,7 +162,7 @@ export class NDFA {
   }
 
   isRecognized(input: string): boolean {
-    let s = new NDFAState(this.deltaTable.length);
+    let s = new NDFAState(this.numberOfStates());
     s.addState(this.initialState);
     for (const c of input) {
       s = this.delta(s, c);
@@ -190,9 +196,130 @@ export class NDFA {
     return accessible.isEmpty();
   }
 
+  // This method allows to create "empty states" at the beginning of the automata. It is used mainly for the Thompson's construction which requires to "merge" automatas and create new states
+  protected createShiftedStates(shiftCount: number): NDFA {
+    let result = new NDFA(shiftCount + this.numberOfStates());
+    result.initialState = this.initialState + shiftCount;
+    result.finalStates = NDFAState.copy(this.finalStates);
+    result.finalStates.shift(shiftCount);
+
+    this.deltaTable.forEach((d, origin) => {
+      for (const symbol of Object.keys(d)) {
+        let transition = NDFAState.copy(this.deltaTable[origin][symbol]);
+        transition.shift(shiftCount);
+        result.deltaTable[origin+shiftCount][symbol] = transition;
+        
+      }
+    });
+    
+    return result;
+  }
+
+  private static createRecognizeCharOrEpsilon(c: Regex): NDFA {
+    let automata = new NDFA(2);
+    switch(c.nodeType) {
+      case RegexNodeType.Char:
+        automata.addTransition(0, c.children as string, 1);
+        break;
+      case RegexNodeType.Epsilon:
+        automata.addTransition(0, epsilonTransition, 1);
+        break;
+      default:
+        assert(false);
+    }
+    automata.initialState = 0;
+    automata.finalStates = NDFAState.fromBoolArray([false, true]);
+    return automata;
+  }
+
+  private static createUnion(a: NDFA, b: NDFA): NDFA {
+    // We chose state 0 to be new initial state and 1 to be the new final state
+    let aShifted = a.createShiftedStates(2);
+    let bShifted = b.createShiftedStates(2 + a.numberOfStates());
+
+    // Copy transitions of a in b
+    for (let i = 0; i < a.numberOfStates(); i++) {
+      bShifted.deltaTable[2+i] = aShifted.deltaTable[2+i];
+    }
+
+    bShifted.addTransition(0, epsilonTransition, aShifted.initialState);
+    bShifted.addTransition(0, epsilonTransition, bShifted.initialState);
+    aShifted.finalStates.foreach((s) => {
+      bShifted.addTransition(s, epsilonTransition, 1);
+    });
+    bShifted.finalStates.foreach((s) => {
+      bShifted.addTransition(s, epsilonTransition, 1);
+    });
+
+    bShifted.initialState = 0;
+    bShifted.finalStates = NDFAState.fromBoolArray([false, true]);
+
+    return bShifted;
+  }
+
+  private static createStar(a: NDFA): NDFA {
+    let aShifted = a.createShiftedStates(2);
+    
+    aShifted.addTransition(0, epsilonTransition, aShifted.initialState);
+    aShifted.addTransition(0, epsilonTransition, 1);
+    aShifted.finalStates.foreach((s) => {
+      aShifted.addTransition(s, epsilonTransition, aShifted.initialState);
+      aShifted.addTransition(s, epsilonTransition, 1);
+    });
+
+    aShifted.initialState = 0;
+    aShifted.finalStates = NDFAState.fromBoolArray([false, true]);
+
+    return aShifted;
+  }
+
+  private static createConcat(a: NDFA, b: NDFA): NDFA {
+    let bShifted = b.createShiftedStates(a.numberOfStates());
+
+    // Copy transitions of a in b
+    for (let i = 0; i < a.numberOfStates(); i++) {
+      bShifted.deltaTable[i] = a.deltaTable[i];
+    }
+    
+    a.finalStates.foreach((s) => {
+      bShifted.addTransition(s, epsilonTransition, bShifted.initialState);
+    })
+
+    bShifted.initialState = a.initialState;
+
+    return bShifted;
+  }
+
+  static Thompson(e: Regex): NDFA {
+    switch (e.nodeType) {
+      case RegexNodeType.Empty: {
+        assert(false); // We need to firstly eliminate empty in expression
+        return new NDFA(0);
+      }
+      case RegexNodeType.Epsilon:
+      case RegexNodeType.Char:
+        return NDFA.createRecognizeCharOrEpsilon(e);
+      case RegexNodeType.Union: {
+        let a = this.Thompson((e.children as Regex[])[0]);
+        let b = this.Thompson((e.children as Regex[])[1]);
+        return this.createUnion(a, b);
+      }
+      case RegexNodeType.Concat: {
+        let a = this.Thompson((e.children as Regex[])[0]);
+        let b = this.Thompson((e.children as Regex[])[1]);
+        return this.createConcat(a, b);
+      }
+      case RegexNodeType.Star: {
+        let a = this.Thompson((e.children as Regex));
+        return this.createStar(a);
+      }
+    }
+  }
+  
+
   // A DFS of the labeled graph, the callBack return the next possible explored state
   private dfs(from: number, callBack: (at: number) => number[]): NDFAState {
-    let visited = new NDFAState(this.deltaTable.length);
+    let visited = new NDFAState(this.numberOfStates());
     let toVisit = [from];
 
     while (toVisit.length != 0) {
@@ -208,7 +335,7 @@ export class NDFA {
   }
 
   private computeEpsilonClosure(state: NDFAState): NDFAState {
-    let closure = new NDFAState(this.deltaTable.length);
+    let closure = new NDFAState(this.numberOfStates());
     state.foreach((s) => {
       this.dfs(s, (i) => {
         closure.addState(i);
