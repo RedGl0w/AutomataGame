@@ -122,6 +122,8 @@ export class NDFA {
     this.deltaTable[originState][symbolRead].addState(destinationState);
   }
 
+  // TODO Find a way to test the generateDot members
+  /* istanbul ignore next */
   generateDot(): string {
     let out: string = "digraph out {\n";
 

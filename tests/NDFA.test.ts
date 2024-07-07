@@ -1,3 +1,4 @@
+import { DFA } from "../src/DFA";
 import { NDFA, NDFAState, epsilonTransition } from "../src/NDFA";
 import { Regex, RegexNodeType } from "../src/regex";
 
@@ -12,11 +13,7 @@ describe("NDFA", () => {
   astarbstar.addTransition(1, "b", 1);
   astarbstar.finalStates = NDFAState.fromBoolArray([false, true]);
 
-  console.log(astarbstar.toDFA());
-
-  console.log(NDFA.Thompson("a|aab*").toDFA().generateDot())
-
-  it("Recognize", () => {
+  it("NDFA Recognize", () => {
     // Some words that should be recognized
     expect(astarbstar.isRecognized("a")).toBeTruthy();
     expect(astarbstar.isRecognized("aa")).toBeTruthy();
@@ -35,7 +32,7 @@ describe("NDFA", () => {
     expect(astarbstar.isRecognized("c")).toBeFalsy();
   });
 
-  it("recognizeEmpty", () => {
+  it("NDFA recognizeEmpty", () => {
     expect(astarbstar.recognizeEmpty()).toBeFalsy();
   });
 
