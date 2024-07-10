@@ -29,32 +29,35 @@ export class NDFAState {
     return s;
   }
 
-  // TODO : Return the object to allow easier usage of these function
-
   // This method allows to shift a state (add state as 0 at the beginning)
-  shift(shiftCount: number): void {
+  shift(shiftCount: number): NDFAState {
     this.bitField <<= BigInt(shiftCount);
     this.numberOfStates += shiftCount;
+    return this;
   }
 
-  union(rhs: NDFAState): void {
+  union(rhs: NDFAState): NDFAState {
     this.bitField |= rhs.bitField;
+    return this;
   }
 
-  intersect(rhs: NDFAState): void {
+  intersect(rhs: NDFAState): NDFAState {
     this.bitField &= rhs.bitField;
+    return this;
   }
 
   contains(state: number): boolean {
     return (this.bitField & BigInt(1<<state)) != 0n;
   }
 
-  addState(state: number): void {
+  addState(state: number): NDFAState {
     this.bitField |= BigInt(1 << state);
+    return this;
   }
 
-  removeState(state: number): void {
+  removeState(state: number): NDFAState {
     this.bitField  &= ~BigInt(1 << state);
+    return this;
   }
 
   foreach(callBack: (state: number) => void): void {
@@ -193,8 +196,7 @@ export class NDFA {
     }
 
     // Check if we have one of the final states after reading input
-    s.intersect(this.finalStates);
-    return !s.isEmpty();
+    return !s.intersect(this.finalStates).isEmpty();
   }
 
   recognizeEmpty(): boolean {
@@ -207,23 +209,19 @@ export class NDFA {
       }
       return next;
     });
-    accessible.intersect(this.finalStates);
-    return accessible.isEmpty();
+    return accessible.intersect(this.finalStates).isEmpty();
   }
 
   // This method allows to create "empty states" at the beginning of the automata. It is used mainly for the Thompson's construction which requires to "merge" automatas and create new states
   protected createShiftedStates(shiftCount: number): NDFA {
     let result = new NDFA(shiftCount + this.numberOfStates());
     result.initialState = this.initialState + shiftCount;
-    result.finalStates = NDFAState.copy(this.finalStates);
-    result.finalStates.shift(shiftCount);
+    result.finalStates = NDFAState.copy(this.finalStates).shift(shiftCount);
 
     this.deltaTable.forEach((d, origin) => {
       for (const symbol of Object.keys(d)) {
-        let transition = NDFAState.copy(this.deltaTable[origin][symbol]);
-        transition.shift(shiftCount);
+        let transition = NDFAState.copy(this.deltaTable[origin][symbol]).shift(shiftCount);
         result.deltaTable[origin+shiftCount][symbol] = transition;
-        
       }
     });
     
@@ -381,8 +379,7 @@ export class NDFA {
     explore(initSClosure);
 
     for(const [stringifiedState, stateInDFA] of Object.entries(table)) {
-      let s: NDFAState = NDFAState.fromString(stringifiedState, this.numberOfStates());
-      s.intersect(this.finalStates);
+      let s: NDFAState = NDFAState.fromString(stringifiedState, this.numberOfStates()).intersect(this.finalStates);
       if (!s.isEmpty()) {
         result.finalStates.push(stateInDFA);
       }
