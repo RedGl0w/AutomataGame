@@ -140,6 +140,180 @@ export class Regex {
     return parsedR;
   }
 
+  isEmpty(): boolean {
+    switch(this.nodeType) {
+      case RegexNodeType.Empty:
+        return true;
+      case RegexNodeType.Epsilon:
+        return false;
+      case RegexNodeType.Char:
+        return false;
+      case RegexNodeType.Union: {
+        for (const c of (this.children as Regex[])) {
+          if (!c.isEmpty()) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case RegexNodeType.Concat: {
+        for (const c of (this.children as Regex[])) {
+          if (c.isEmpty()) {
+            return true;
+          }
+        }
+        return false;
+      }
+      case RegexNodeType.Star: {
+        return (this.children as Regex).isEmpty();
+      }
+    }
+  }
+
+  containsEpsilon(): boolean {
+    switch(this.nodeType) {
+      case RegexNodeType.Empty:
+        return false;
+      case RegexNodeType.Epsilon:
+        return true;
+      case RegexNodeType.Char:
+        return false;
+      case RegexNodeType.Union: {
+        for (const c of (this.children as Regex[])) {
+          if (c.containsEpsilon()) {
+            return true;
+          }
+        }
+        return false;
+      }
+      case RegexNodeType.Concat: {
+        for (const c of (this.children as Regex[])) {
+          if (!c.containsEpsilon()) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case RegexNodeType.Star:
+        return !(this.children as Regex).isEmpty();
+    }
+  }
+
+  private static sortedUnion(l1: string[], l2: string[]): string[] {
+    let r: string[] = [];
+    while(l1.length != 0 && l2.length != 0) {
+      if (l1[0] == l2[0]) {
+        r.push(l1[0]);
+        l1 = l1.slice(1);
+        l2 = l2.slice(1);
+      } else if (l1[0].localeCompare(l2[0]) == -1) {
+        r.push(l1[0]);
+        l1 = l1.slice(1);
+      } else {
+        r.push(l2[0]);
+        l2 = l2.slice(1);
+      }
+    }
+    r = r.concat(l1).concat(l2);
+    return r;
+  }
+
+  // For all of these operation we consider the Regex to not contain ∅
+  computeP(): string[] {
+    switch (this.nodeType) {
+      case RegexNodeType.Empty:
+      case RegexNodeType.Epsilon:
+        return [];
+      case RegexNodeType.Char:
+        return [this.children as string];
+      case RegexNodeType.Union: {
+        let result: string[] = [];
+        for (const c of (this.children as Regex[])) {
+          result = Regex.sortedUnion(result, c.computeP());
+        }
+        return result;
+      }
+      case RegexNodeType.Concat: {
+        if ((this.children as Regex[])[0].containsEpsilon()) {
+          return Regex.sortedUnion((this.children as Regex[])[0].computeP(), (this.children as Regex[])[1].computeP());
+        }
+        return (this.children as Regex[])[0].computeP();
+      }
+      case RegexNodeType.Star: {
+        return (this.children as Regex).computeP();
+      }
+    }
+  }
+
+  computeD(): string[] {
+    switch (this.nodeType) {
+      case RegexNodeType.Empty:
+      case RegexNodeType.Epsilon:
+        return [];
+      case RegexNodeType.Char:
+        return [this.children as string];
+      case RegexNodeType.Union: {
+        let result: string[] = [];
+        for (const c of (this.children as Regex[])) {
+          result = Regex.sortedUnion(result, c.computeD());
+        }
+        return result;
+      }
+      case RegexNodeType.Concat: {
+        if ((this.children as Regex[])[1].containsEpsilon()) {
+          return Regex.sortedUnion((this.children as Regex[])[0].computeD(), (this.children as Regex[])[1].computeD());
+        }
+        return (this.children as Regex[])[1].computeD();
+      }
+      case RegexNodeType.Star: {
+        return (this.children as Regex).computeD();
+      }
+    }
+  }
+
+  private static cartesianProductOfStringArray(l1: string[], l2: string[]): string[] {
+    let result: string[] = [];
+    l1.forEach((i) => {
+      l2.forEach((j) => {
+        result.push(i+j);
+      });
+    });
+    return result;
+  }
+
+  computeF(): string[] {
+    switch (this.nodeType) {
+      case RegexNodeType.Empty:
+      case RegexNodeType.Epsilon:
+      case RegexNodeType.Char:
+        return [];
+      case RegexNodeType.Union: {
+        let result: string[] = [];
+        for (const c of (this.children as Regex[])) {
+          result = Regex.sortedUnion(result, c.computeF());
+        }
+        return result;
+      }
+      case RegexNodeType.Concat: {
+        let result: string[] = [];
+        let d0 = (this.children as Regex[])[0].computeD();
+        let p1 = (this.children as Regex[])[1].computeP();
+        for (const c of (this.children as Regex[])) {
+          result = Regex.sortedUnion(result, c.computeF());
+        }
+        result = Regex.sortedUnion(result, Regex.cartesianProductOfStringArray(d0, p1));
+        return result;
+      }
+      case RegexNodeType.Star: {
+        let result: string[] = (this.children as Regex).computeF();
+        let d = (this.children as Regex).computeD();
+        let p = (this.children as Regex).computeP();
+        result = Regex.sortedUnion(result, Regex.cartesianProductOfStringArray(d, p));
+        return result;
+      }
+    }
+  }
+
   nodeType: RegexNodeType;
   children: Regex | Regex[] | string | undefined;
 }

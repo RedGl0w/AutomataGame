@@ -317,6 +317,7 @@ export class NDFA {
       case RegexNodeType.Char:
         return NDFA.createRecognizeCharOrEpsilon(e);
       case RegexNodeType.Union: {
+        // We should make sure in the rest of the codebase that the children are array of length 2
         let a = this.Thompson((e.children as Regex[])[0]);
         let b = this.Thompson((e.children as Regex[])[1]);
         return this.createUnion(a, b);
