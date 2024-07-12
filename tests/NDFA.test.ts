@@ -53,4 +53,16 @@ describe("NDFA", () => {
     expect(expThompson.isRecognized("aaa")).toBeFalsy();
     expect(expThompson.isRecognized("aca")).toBeFalsy();
   });
+
+  it("berrySethi", () => {
+    function compareToThompson(s: string) {
+      let a1 = NDFA.berrySethi(s).toDFA();
+      let a2 = NDFA.Thompson(s).toDFA();
+      expect(DFA.areLanguageEqual(a1, a2)).toBeTruthy();
+    }
+
+    compareToThompson("aa");
+    compareToThompson("a*b|c");
+    compareToThompson("aa*c|c");
+  });
 });

@@ -1,4 +1,5 @@
 import assert from "assert";
+import { Regex } from "./regex"
 
 export class DFA {
   constructor(stateCount: number) {
@@ -164,7 +165,7 @@ export class DFA {
 
   // Compute the automata which recognize its complementary language
   makeComplementary(): void {
-
+    // We should assert that the automata is complete
     let newFinalStates: number[] = [];
     let n = this.numberOfStates();
 

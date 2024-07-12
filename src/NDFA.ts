@@ -388,6 +388,80 @@ export class NDFA {
 
     return result;
   }
+
+  unLinearize(table: Record<string, string>): void {
+    this.deltaTable.forEach((_, i) => {
+      let result: Record<NDFATransitionSymbol, NDFAState> = {};
+      for (const [symbol, destination] of Object.entries(this.deltaTable[i])) {
+        if (Object.keys(table).includes(symbol)) {
+          if (Object.keys(result).includes(table[symbol])) {
+            result[table[symbol]].union(destination);
+          } else {
+            result[table[symbol]] = destination;
+          }
+        } else {
+          result[symbol] = destination;
+        }
+      }
+      this.deltaTable[i] = result;
+    });
+  }
+
+  private static glushkov(e: Regex): NDFA {
+    let p = e.computeP();
+    let f = e.computeF();
+    let d = e.computeD();
+
+    let setOfStates: Set<string> = new Set();
+    for (let i of p) {
+      setOfStates.add(i);
+    }
+    for (let i of f) {
+      setOfStates.add(i[1]);
+    }
+    for (let i of d) {
+      setOfStates.add(i);
+    }
+
+    let result = new NDFA(1+setOfStates.size);
+
+    let letterToState: Record<string, number> = {};
+    let nextState = 1;
+    function addStateIfDoesntExist(s: string): number {
+      if (!Object.keys(letterToState).includes(s)) {
+        letterToState[s] = nextState;
+        nextState++;
+      }
+      return letterToState[s];
+    }
+
+    p.forEach((s) => {
+      result.addTransition(0, s, addStateIfDoesntExist(s));
+    });
+
+    f.forEach((s) => {
+      let x = s[0];
+      let y = s[1];
+      result.addTransition(addStateIfDoesntExist(x), y, addStateIfDoesntExist(y));
+    });
+
+    d.forEach((s) => {
+      result.finalStates.addState(addStateIfDoesntExist(s));
+    });
+
+    return result;
+  }
+
+  static berrySethi(e: Regex | string): NDFA {
+    // TODO We should check for epsilon in the Regex
+    if (typeof e == "string") {
+      return this.berrySethi(Regex.parse(e as string));
+    }
+    let [linearized, table] = (e as Regex).linearize();
+    let a = NDFA.glushkov(linearized);
+    a.unLinearize(table);
+    return a;
+  }
   
 
   // A DFS of the labeled graph, the callBack return the next possible explored state

@@ -1,4 +1,6 @@
 import { Regex, RegexNodeType } from '../src/regex'
+import { NDFA } from '../src/NDFA'
+import { DFA } from '../src/DFA'
 
 describe("Regex", () => {
 
@@ -67,4 +69,14 @@ describe("Regex", () => {
     expect(e.computeD()).toStrictEqual(["a", "b"]);
     expect(e.computeF()).toStrictEqual(["aa", "ab", "ba"]);
   });
+
+  it("Linearize", () => {
+    let e = Regex.parse("(aabb|c*)ε");
+    let a1 = NDFA.Thompson(e).toDFA();
+    let [lineazized, table] = e.linearize();
+    let a2 = NDFA.Thompson(lineazized);
+    expect(DFA.areLanguageEqual(a1, a2.toDFA())).toBeFalsy();
+    a2.unLinearize(table);
+    expect(DFA.areLanguageEqual(a1, a2.toDFA())).toBeTruthy();
+  })
 })

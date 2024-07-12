@@ -65,6 +65,5 @@ describe("DFA", () => {
     astarbstarNDFA.finalStates = NDFAState.fromBoolArray([false, true]);
 
     expect(DFA.areLanguageEqual(astarbstar, astarbstarNDFA.toDFA())).toBeTruthy();
-
-  })
+  });
 })

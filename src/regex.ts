@@ -314,6 +314,52 @@ export class Regex {
     }
   }
 
+  linearize(): [Regex, Record<string, string>] {
+    let table: Record<string, string> = {};
+    let [result, _] = this.privlinearize("a".charCodeAt(0), table);
+    return [result, table];
+  }
+
+  private privlinearize(nextC: number, table: Record<string, string>): [Regex, number] {
+    let result: Record<string, string> = {};
+    switch (this.nodeType) {
+      case RegexNodeType.Empty:
+      case RegexNodeType.Epsilon:
+        return [this, nextC];
+      case RegexNodeType.Char: {
+        let c = String.fromCharCode(nextC);
+        table[c] = (this.children as string);
+        return [
+          new Regex(RegexNodeType.Char, c),
+          nextC+1
+        ];
+      }
+      case RegexNodeType.Union: {
+        let [e1, nextCe1] = (this.children as Regex[])[0].privlinearize(nextC, table);
+        let [e2, nextCe2] = (this.children as Regex[])[1].privlinearize(nextCe1, table);
+        return [
+          new Regex(RegexNodeType.Union, [e1, e2]),
+          nextCe2
+        ];
+      }
+      case RegexNodeType.Concat: {
+        let [e1, nextCe1] = (this.children as Regex[])[0].privlinearize(nextC, table);
+        let [e2, nextCe2] = (this.children as Regex[])[1].privlinearize(nextCe1, table);
+        return [
+          new Regex(RegexNodeType.Concat, [e1, e2]),
+          nextCe2
+        ];
+      }
+      case RegexNodeType.Star: {
+        let [e1, nextCe1] = (this.children as Regex).privlinearize(nextC, table);
+        return [
+          new Regex(RegexNodeType.Star, e1),
+          nextCe1
+        ];
+      }
+    }
+  }
+
   nodeType: RegexNodeType;
   children: Regex | Regex[] | string | undefined;
 }
